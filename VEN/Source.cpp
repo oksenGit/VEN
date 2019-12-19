@@ -11,7 +11,7 @@ enum TokenType
 {
 	BEGIN_SY, END_SY, PROC_SY, EQUAL_SY,
 	LEFTPAR_SY, RIGHTPAR_SY, INTEGER_SY,
-	BOOLEAN_SY, COMMA_SY, SEMICOMA_SY,
+	BOOLEAN_SY, COMMA_SY, SEMICOLON_SY,
 	ASSIGMENT_SY, READ_SY, WRITE_SY,
 	IF_SY, THEN_SY, ELSE_SY, WHILE_SY,
 	DO_SY, CALL_SY, OR_SY, AND_SY, NOT_SY,
@@ -35,7 +35,7 @@ public:
 Token current_token;
 int SIZE = 10;
 
-enum Type{T_INTEGER, T_BOOLEAN, T_PROC,T_EMPTY};
+enum Type { T_INTEGER, T_BOOLEAN, T_PROC, T_EMPTY };
 
 
 struct Param
@@ -67,7 +67,7 @@ public:
 	Symbol** table;
 	STable() {
 		table = new Symbol*[SIZE];
-		
+
 		for (int i = 0; i < SIZE; i++)
 		{
 			table[i] = NULL;
@@ -127,7 +127,7 @@ public:
 			else
 				entry = entry->next;
 		}
-		return {};
+		return{};
 	}
 	bool intersect(STable sub) {
 		for (int i = 0; i < SIZE; i++)
@@ -287,7 +287,7 @@ public:
 		}
 		else if (ch == ';') {
 			tokenHolder.name = ch;
-			tokenHolder.type = SEMICOMA_SY;
+			tokenHolder.type = SEMICOLON_SY;
 			return tokenHolder;
 		}
 		else if (ch == ',') {
@@ -446,14 +446,68 @@ public:
 		else syntax_error();
 	}
 	//==============================================================
+
+	//nest functions
 	vector<STable> nest;
+	bool searchNest(string name) {
+		for (int i = nest.size() - 1; i >= 0; i--) {
+			if (nest[i].search(name)) return true;
+		}
+		return false;
+	}
+
+	Type getTypeNest(string name) {
+		for (int i = nest.size() - 1; i >= 0; i--) {
+			if (nest[i].search(name)) {
+				return nest[i].getType(name);
+			}
+		}
+		return T_EMPTY;
+	}
+
+	vector<Param> getParamNest(string name) {
+		for (int i = nest.size() - 1; i >= 0; i--) {
+			if (nest[i].search(name) && getTypeNest(name) == T_PROC) {
+				return nest[i].getParam(name);
+			}
+		}
+		return{};
+	}
+
+	vector<Type> getNameListType() {
+		vector<Type> types = {};
+		types.push_back(getTypeNest(current_token.name));
+		match(ID_SY);
+		while (current_token.type == COMMA_SY) {
+			match(COMMA_SY);
+			types.push_back(getTypeNest(current_token.name));
+			match(ID_SY);
+		}
+		return types;
+	}
+
+	bool matchParams(string name) {
+		vector<Param> nameParams = getParamNest(name);
+		vector<Type> nameLtype = getNameListType();
+		if (nameParams.size() != nameLtype.size()) {
+			return false;
+		}
+		for (int i = 0; i < nameParams.size(); i++) {
+			if (nameLtype[i] != nameParams[i].type) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	//==============================================================
 
 	//<program> ::= <block>
-	void program(){
+	void program() {
 		block();
 		match($_SY);
 	}
-	
+
 	//<block> ::= begin <declseq> <comseq> end
 	void block()
 	{
@@ -465,13 +519,13 @@ public:
 		match(END_SY);
 	}
 	//<declseq> ::= <decl>{<decl>} 
-	void declSq(STable &st){
+	void declSq(STable &st) {
 		decl(st);
-		while (current_token.type == BOOLEAN_SY|| current_token.type == INTEGER_SY || current_token.type == PROC_SY)
+		while (current_token.type == BOOLEAN_SY || current_token.type == INTEGER_SY || current_token.type == PROC_SY)
 		{
 			STable s2 = STable();
 			decl(s2);
-			if(st.intersect(s2))
+			if (st.intersect(s2))
 			{
 				cout << "Error var already declared\n";
 				return;
@@ -479,12 +533,12 @@ public:
 			st.union_table(s2);
 		}
 	}
-	
+
 	//decl ::= <type> <name - list> |
 	//		proc <name>[(<parameter - list>)] = <command> 
 	void decl(STable &st)
 	{
-		if(current_token.type == BOOLEAN_SY || current_token.type == INTEGER_SY)
+		if (current_token.type == BOOLEAN_SY || current_token.type == INTEGER_SY)
 		{
 			constructName(st);
 		}
@@ -494,7 +548,7 @@ public:
 			string idName = current_token.name;
 			vector<Param> params = {};
 			match(ID_SY);
-			if(current_token.type == LEFTPAR_SY){
+			if (current_token.type == LEFTPAR_SY) {
 				match(LEFTPAR_SY);
 				params = param_list();
 				match(RIGHTPAR_SY);
@@ -508,15 +562,15 @@ public:
 	{
 		Type t = type();
 		vector<Param> params;
-		st.insert(current_token.name,t,{});
+		st.insert(current_token.name, t, {});
 		params.push_back(Param(current_token.name, t));
 		match(ID_SY);
-		while(current_token.type == COMMA_SY)
+		while (current_token.type == COMMA_SY)
 		{
 			match(COMMA_SY);
-			if(st.search(current_token.name)){
+			if (st.search(current_token.name)) {
 				cout << "Error name list Var Already declared\n";
-				return {};
+				return{};
 			}
 			st.insert(current_token.name, t, {});
 			params.push_back(Param(current_token.name, t));
@@ -526,45 +580,147 @@ public:
 	}
 
 	//<parameter-list> ::= <type> <name-list>{; <type> <namelist>} 
-	vector<Param> param_list(){
+	vector<Param> param_list() {
 		STable stP = STable();
 		vector<Param> params = constructName(stP);
-		while(current_token.type == SEMICOMA_SY)
+		while (current_token.type == SEMICOLON_SY)
 		{
-			match(SEMICOMA_SY);
+			match(SEMICOLON_SY);
 			vector<Param> temp = constructName(stP);
-			for(int i = 0; temp.size(); i++){
+			for (int i = 0; temp.size(); i++) {
 				params.push_back(temp[i]);
 			}
 		}
 		return params;
 	}
-	
+
 	Type type()
 	{
 		Type t;
 		switch (current_token.type)
 		{
 		case INTEGER_SY:
-			t= T_INTEGER;
+			t = T_INTEGER;
 		case BOOLEAN_SY:
-			t=T_BOOLEAN;
+			t = T_BOOLEAN;
 		case PROC_SY:
-			t=T_PROC;
+			t = T_PROC;
 		default:
-			t= T_EMPTY;
+			t = T_EMPTY;
 		}
 		match(current_token.type);
 		return t;
 	}
-	
-	void comSq(STable st){
+
+	//<command-seq> ::= <command> {; <command>}
+	void comSq(STable st) {
 		command(st);
+		while (current_token.type == SEMICOLON_SY) {
+			match(SEMICOLON_SY);
+			command(st);
+		}
 	}
-	void command(STable st)	{
-		
+	/*
+	<command> ::= <name> := <expr>
+				| read <name>
+				| write <expr>
+				| if <expr> then <command-seq> [else <command-seq>] end if
+				| while <expr> do <command-seq> end while
+				| call <name> [(<name-list>)]
+				|<block>
+	*/
+
+
+	void command(STable st) {
+		if (current_token.type == ID_SY) {
+			if (searchNest(current_token.name) == false) {
+				cout << "id must be declared\n";
+				return;
+			}
+			if (getTypeNest(current_token.name) != T_INTEGER && getTypeNest(current_token.name) != T_BOOLEAN) {
+				cout << "id must be variable\n";
+				return;
+			}
+			if (getTypeNest(current_token.name) != expr()) {
+				cout << "id type must be the same type of the expr\n";
+				return;
+			}
+			match(ID_SY);
+		}
+		else if (current_token.type == READ_SY) {
+			match(READ_SY);
+			if (getTypeNest(current_token.name) != T_INTEGER && getTypeNest(current_token.name) != T_BOOLEAN) {
+				cout << "id in read must be variable\n";
+				return;
+			}
+			match(ID_SY);
+		}
+		else if (current_token.type == WRITE_SY) {
+			match(WRITE_SY);
+			expr();
+		}
+		else if (current_token.type == IF_SY) {
+			match(IF_SY);
+			if (expr() != T_BOOLEAN) {
+				cout << "expr in if must be boolean\n";
+				return;
+			}
+			match(THEN_SY);
+			comSq(st);
+			if (current_token.type == ELSE_SY) {
+				match(ELSE_SY);
+				comSq(st);
+			}
+			match(END_SY);
+			match(IF_SY);
+		}
+		else if (current_token.type == WHILE_SY) {
+			match(WHILE_SY);
+			if (expr() != T_BOOLEAN) {
+				cout << "expr in while must be boolean\n";
+				return;
+			}
+			match(DO_SY);
+			comSq(st);
+			match(END_SY);
+			match(IF_SY);
+		}
+		else if (current_token.type == CALL_SY) {
+			match(CALL_SY);
+			if (getTypeNest(current_token.name) != T_PROC) {
+				cout << current_token.name << " must be declared as proc\n";
+				return;
+			}
+			string idName = current_token.name;
+			match(ID_SY);
+			if (current_token.type == LEFTPAR_SY) {
+				match(LEFTPAR_SY);
+				if (matchParams(idName) == false) {
+					cout << "params don't match\n";
+					return;
+				}
+				match(RIGHTPAR_SY);
+			}
+		}
+		else if (current_token.type == BEGIN_SY) {
+			block();
+		}
+		else {
+			syntax_error();
+		}
+
 	}
-	
+
+
+	Type expr() {
+
+	}
+
+	Type getExpType() {
+
+
+	}
+
 };
 
 int main() {
